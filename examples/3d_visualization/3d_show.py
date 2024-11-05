@@ -131,7 +131,9 @@ class HandTracker3DRenderer:
             finger_pixel[i, 1] = int(y / max_size * im_size)
         return finger_pixel
     
-    def draw_third(self, hand_nodes, num_node):
+    def draw_third(self, hand):
+        hand_nodes = hand.world_landmarks
+        num_node = 21
         im_size = 500
         key_0 = getkey()
         global n_1
@@ -158,7 +160,7 @@ class HandTracker3DRenderer:
         M_2 = np.array([[1, 0, 0], [0, np.cos(Sita_1), -np.sin(Sita_1)], [0, np.sin(Sita_1), np.cos(Sita_1)]])
         rot_finger = M_2 @ M_1 @ hand_nodes.T
         finger_pixel = self.to_pixel(rot_finger, im_size, num_node)
-        return finger_pixel, im_size
+        return finger_pixel, im_size, num_node
 
 def getkey():
     fno = sys.stdin.fileno()
@@ -258,23 +260,20 @@ while True:
         cv2.imshow("HandTracker", frame)
         for k, hand in enumerate(hands):
             if k == 0:
-                hand_nodes = hand.world_landmarks
-                num_node = 21
-                if hand_nodes.shape == (num_node, 3):
-                    finger_pixel, im_size = renderer3d.draw_third(hand_nodes, num_node)
-                    third_draw = np.zeros((im_size, im_size, 3), dtype=np.uint8)
-                    num_edge = 20
-                    for i in range(num_node):
-                        cv2.circle(third_draw, (finger_pixel[i, 0], finger_pixel[i, 1]), 5, (0, 255, 0), -1)
-                    for i in range(num_edge):
-                        r = i % 4
-                        if r == 0:
-                            j_0 = 0
-                        else:
-                            j_0 = i
-                        j_1 = i + 1
-                        cv2.line(third_draw, (finger_pixel[j_0, 0], finger_pixel[j_0, 1]), (finger_pixel[j_1, 0], finger_pixel[j_1, 1]), (0, 255, 0), 3)
-                    cv2.imshow('3D model', third_draw)
+                finger_pixel, im_size, num_node = renderer3d.draw_third(hand)
+                third_draw = np.zeros((im_size, im_size, 3), dtype=np.uint8)
+                num_edge = 20
+                for i in range(num_node):
+                    cv2.circle(third_draw, (finger_pixel[i, 0], finger_pixel[i, 1]), 5, (0, 255, 0), -1)
+                for i in range(num_edge):
+                    r = i % 4
+                    if r == 0:
+                        j_0 = 0
+                    else:
+                        j_0 = i
+                    j_1 = i + 1
+                    cv2.line(third_draw, (finger_pixel[j_0, 0], finger_pixel[j_0, 1]), (finger_pixel[j_1, 0], finger_pixel[j_1, 1]), (0, 255, 0), 3)
+                cv2.imshow('3D model', third_draw)
     key = cv2.waitKey(1)
     # Draw hands on open3d canvas
     renderer3d.draw(hands)
