@@ -8,6 +8,13 @@ import argparse
 import numpy as np
 import cv2
 from o3d_utils import Visu3D
+import fcntl
+import termios
+import sys
+import os
+
+n_1 = 0
+n_2 = 0
 
 LINES_HAND = [[0,1],[1,2],[2,3],[3,4], 
             [0,5],[5,6],[6,7],[7,8],
@@ -113,6 +120,80 @@ class HandTracker3DRenderer:
             self.draw_hand(hand, i)
         self.vis3d.render()
         self.nb_hands_in_previous_frame = len(hands)
+    
+    def to_pixel(self, finger, im_size, num_node):
+        max_size = 2.0
+        finger_pixel = np.zeros((num_node, 2), dtype=int)
+        for i in range(num_node):
+            x = finger[0, i] * 10 + max_size / 2
+            y = finger[1, i] * 10 + max_size / 2
+            finger_pixel[i, 0] = int(x / max_size * im_size)
+            finger_pixel[i, 1] = int(y / max_size * im_size)
+        return finger_pixel
+    
+    def draw_third(self, hand_nodes, num_node):
+        im_size = 500
+        key_0 = getkey()
+        global n_1
+        global n_2
+        #print(key_0)
+        if key_0 == 1792833:
+            if n_1 != 9:
+                n_1 += 1
+        if key_0 == 1792834:
+            if n_1 != -9:
+                n_1 -= 1
+        if key_0 == 1792835:
+            n_2 += 1
+            if n_2 == 19:
+                n_2 = -17
+        if key_0 == 1792836:
+            n_2 -= 1
+            if n_2 == -18:
+                n_2 = 18
+        Sita_1 = n_1 * np.pi / 18
+        Sita_2 = n_2 * np.pi / 18
+        #print(n_2)
+        M_1 = np.array([[np.cos(Sita_2), 0, -np.sin(Sita_2)], [0, 1, 0], [np.sin(Sita_2), 0, np.cos(Sita_2)]])
+        M_2 = np.array([[1, 0, 0], [0, np.cos(Sita_1), -np.sin(Sita_1)], [0, np.sin(Sita_1), np.cos(Sita_1)]])
+        rot_finger = M_2 @ M_1 @ hand_nodes.T
+        finger_pixel = self.to_pixel(rot_finger, im_size, num_node)
+        return finger_pixel, im_size
+
+def getkey():
+    fno = sys.stdin.fileno()
+
+    #stdinの端末属性を取得
+    attr_old = termios.tcgetattr(fno)
+
+    # stdinのエコー無効、カノニカルモード無効
+    attr = termios.tcgetattr(fno)
+    attr[3] = attr[3] & ~termios.ECHO & ~termios.ICANON # & ~termios.ISIG
+    termios.tcsetattr(fno, termios.TCSADRAIN, attr)
+
+    # stdinをNONBLOCKに設定
+    fcntl_old = fcntl.fcntl(fno, fcntl.F_GETFL)
+    fcntl.fcntl(fno, fcntl.F_SETFL, fcntl_old | os.O_NONBLOCK)
+
+    chr = 0
+
+    try:
+        # キーを取得
+        c = sys.stdin.read(1)
+        if len(c):
+            while len(c):
+                chr = (chr << 8) + ord(c)
+                c = sys.stdin.read(1)
+                #up:1792833
+                #down:1792834
+                #right:1792835
+                #left:1792836
+    finally:
+        # stdinを元に戻す
+        fcntl.fcntl(fno, fcntl.F_SETFL, fcntl_old)
+        termios.tcsetattr(fno, termios.TCSANOW, attr_old)
+
+    return chr
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('-e', '--edge', action="store_true",
@@ -175,6 +256,25 @@ while True:
         # Render 2d frame
         frame = renderer2d.draw(frame, hands, bag)
         cv2.imshow("HandTracker", frame)
+        for k, hand in enumerate(hands):
+            if k == 0:
+                hand_nodes = hand.world_landmarks
+                num_node = 21
+                if hand_nodes.shape == (num_node, 3):
+                    finger_pixel, im_size = renderer3d.draw_third(hand_nodes, num_node)
+                    third_draw = np.zeros((im_size, im_size, 3), dtype=np.uint8)
+                    num_edge = 20
+                    for i in range(num_node):
+                        cv2.circle(third_draw, (finger_pixel[i, 0], finger_pixel[i, 1]), 5, (0, 255, 0), -1)
+                    for i in range(num_edge):
+                        r = i % 4
+                        if r == 0:
+                            j_0 = 0
+                        else:
+                            j_0 = i
+                        j_1 = i + 1
+                        cv2.line(third_draw, (finger_pixel[j_0, 0], finger_pixel[j_0, 1]), (finger_pixel[j_1, 0], finger_pixel[j_1, 1]), (0, 255, 0), 3)
+                    cv2.imshow('3D model', third_draw)
     key = cv2.waitKey(1)
     # Draw hands on open3d canvas
     renderer3d.draw(hands)
